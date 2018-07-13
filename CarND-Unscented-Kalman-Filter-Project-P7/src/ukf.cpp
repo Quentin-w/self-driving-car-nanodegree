@@ -93,10 +93,10 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	if (!is_initialized_) {
 
 		// init the first measurement
-		x_ << 1, 1, 1, 1, 1;
+		x_ << 1, 1, 1, 1, 0.1;
 
 		// init covariance matrix
-		P_ << 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1;
+		P_ << 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 100;
 
 		// init timestamp
 		time_us_ = meas_package.timestamp_;
@@ -105,8 +105,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		if (meas_package.sensor_type_ == MeasurementPackage::LASER
 				&& use_laser_) {
 
-			x_(0) = meas_package.raw_measurements_(0);
-			x_(1) = meas_package.raw_measurements_(1);
+			x_[0] = meas_package.raw_measurements_[0];
+			x_[1] = meas_package.raw_measurements_[1];
 
 		}
 		//INIT for RADAR
@@ -115,11 +115,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 			/**
 			 Convert radar from polar to cartesian coordinates and initialize state.
 			 */
-			float ro = meas_package.raw_measurements_(0);
-			float phi = meas_package.raw_measurements_(1);
-			float ro_dot = meas_package.raw_measurements_(2);
-			x_(0) = ro * cos(phi);
-			x_(1) = ro * sin(phi);
+			double ro = meas_package.raw_measurements_[0];
+			double phi = meas_package.raw_measurements_[1];
+			double ro_dot = meas_package.raw_measurements_[2];
+			x_[0] = ro * cos(phi);
+			x_[1] = ro * sin(phi);
 		}
 		// Initialization is now done !
 		is_initialized_ = true;
@@ -131,7 +131,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 	 *  UPDATE
 	 ****************************************************************************/
 	//get the delta t ,time between the current and previous measurements
-	float delta_t = (meas_package.timestamp_ - time_us_) / 1000000.0;//dt - expressed in seconds
+	double delta_t = (meas_package.timestamp_ - time_us_) / 1000000.0;//dt - expressed in seconds
 	time_us_ = meas_package.timestamp_;
 	Prediction(delta_t);
 
@@ -197,8 +197,8 @@ void UKF::Prediction(double delta_t) {
 
 	//create augmented mean state
 	x_aug.head(5) = x_;
-	x_aug(5) = 0;
-	x_aug(6) = 0;
+	x_aug[5] = 0;
+	x_aug[6] = 0;
 
 	//create augmented covariance matrix
 	P_aug.fill(0.0);
@@ -288,10 +288,10 @@ void UKF::Prediction(double delta_t) {
 		// state difference
 		VectorXd x_diff = Xsig_pred_.col(i) - x_;
 		//angle normalization
-		while (x_diff(3) > M_PI)
-			x_diff(3) -= 2 * M_PI;
-		while (x_diff(3) < -M_PI)
-			x_diff(3) += 2 * M_PI;
+		while (x_diff[3] > M_PI)
+			x_diff[3] -= 2 * M_PI;
+		while (x_diff[3] < -M_PI)
+			x_diff[3] += 2 * M_PI;
 
 		P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
 	}
@@ -443,10 +443,10 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 		VectorXd z_diff = Zsig.col(i) - z_pred;
 
 		//angle normalization
-		while (z_diff(1) > M_PI)
-			z_diff(1) -= 2. * M_PI;
-		while (z_diff(1) < -M_PI)
-			z_diff(1) += 2. * M_PI;
+		while (z_diff[1] > M_PI)
+			z_diff[1] -= 2. * M_PI;
+		while (z_diff[1] < -M_PI)
+			z_diff[1] += 2. * M_PI;
 
 		S = S + weights_(i) * z_diff * z_diff.transpose();
 	}
@@ -467,18 +467,18 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 		//residual
 		VectorXd z_diff = Zsig.col(i) - z_pred;
 		//angle normalization
-		while (z_diff(1) > M_PI)
-			z_diff(1) -= 2. * M_PI;
-		while (z_diff(1) < -M_PI)
-			z_diff(1) += 2. * M_PI;
+		while (z_diff[1] > M_PI)
+			z_diff[1] -= 2. * M_PI;
+		while (z_diff[1] < -M_PI)
+			z_diff[1] += 2. * M_PI;
 
 		// state difference
 		VectorXd x_diff = Xsig_pred_.col(i) - x_;
 		//angle normalization
-		while (x_diff(3) > M_PI)
-			x_diff(3) -= 2. * M_PI;
-		while (x_diff(3) < -M_PI)
-			x_diff(3) += 2. * M_PI;
+		while (x_diff[3] > M_PI)
+			x_diff[3] -= 2. * M_PI;
+		while (x_diff[3] < -M_PI)
+			x_diff[3] += 2. * M_PI;
 
 		Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
 	}
@@ -490,16 +490,17 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 	VectorXd z_diff = z - z_pred;
 
 	//angle normalization
-	while (z_diff(1) > M_PI)
-		z_diff(1) -= 2. * M_PI;
-	while (z_diff(1) < -M_PI)
-		z_diff(1) += 2. * M_PI;
+	while (z_diff[1] > M_PI)
+		z_diff[1] -= 2. * M_PI;
+	while (z_diff[1] < -M_PI)
+		z_diff[1] += 2. * M_PI;
+
+	//calculate NIS
+	NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
 
 	//update state mean and covariance matrix
 	x_ = x_ + K * z_diff;
 	P_ = P_ - K * S * K.transpose();
 
 
-	//calculate NIS
-	NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
 }
