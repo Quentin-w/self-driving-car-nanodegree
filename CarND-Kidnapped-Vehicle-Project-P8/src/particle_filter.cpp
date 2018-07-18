@@ -30,7 +30,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
 
-	if(is_initialized){
+	if (is_initialized) {
 		return;
 	}
 
@@ -134,7 +134,9 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted,
 			LandmarkObs p = predicted[j];
 
 			// get the distance between current/predicted landmarks
-			double dist = sqrt((p.x - observation.x) * (p.x - observation.x) + (p.y - observation.y) * (p.y - observation.y));
+			double dist = sqrt(
+					(p.x - observation.x) * (p.x - observation.x)
+							+ (p.y - observation.y) * (p.y - observation.y));
 
 			// find the nearest landmark from the current observed landmark
 			if (dist < min_dist) {
@@ -264,37 +266,39 @@ void ParticleFilter::resample() {
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
-	 vector<Particle> new_particles;
+	//Create a new vector that will host our resampled particles
+	vector<Particle> resampled_particles;
 
-	  // get all of the current weights
-	  vector<double> weights;
-	  for (int i = 0; i < num_particles; i++) {
-	    weights.push_back(particles[i].weight);
-	  }
+	// get the different particles current weight and stor it in the weights vector
+	vector<double> weights;
+	for (int i = 0; i < num_particles; i++) {
+		weights.push_back(particles[i].weight);
+	}
+	//  Store the maximum weight
+	double max_weight = *max_element(weights.begin(), weights.end());
 
-	  // generate random starting index for resampling wheel
-	  uniform_int_distribution<int> uniintdist(0, num_particles-1);
-	  auto index = uniintdist(gen);
+	// generate random starting reference
+	uniform_int_distribution<int> uniform_int_distribution(0,
+			num_particles - 1);
+	auto reference = uniform_int_distribution(gen);
 
-	  // get max weight
-	  double max_weight = *max_element(weights.begin(), weights.end());
+	// uniform random distribution [0.0, max_weight)
+	uniform_real_distribution<double> uniform_real_distribution(0.0,
+			max_weight);
 
-	  // uniform random distribution [0.0, max_weight)
-	  uniform_real_distribution<double> unirealdist(0.0, max_weight);
+	double beta = 0.0;
 
-	  double beta = 0.0;
+	// resampling the particles
+	for (int i = 0; i < num_particles; i++) {
+		beta += uniform_real_distribution(gen) * 2.0;
+		while (beta > weights[reference]) {
+			beta -= weights[reference];
+			reference = (reference + 1) % num_particles;
+		}
+		resampled_particles.push_back(particles[reference]);
+	}
 
-	  // spin the resample wheel!
-	  for (int i = 0; i < num_particles; i++) {
-	    beta += unirealdist(gen) * 2.0;
-	    while (beta > weights[index]) {
-	      beta -= weights[index];
-	      index = (index + 1) % num_particles;
-	    }
-	    new_particles.push_back(particles[index]);
-	  }
-
-	particles = new_particles;
+	particles = resampled_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle& particle,
