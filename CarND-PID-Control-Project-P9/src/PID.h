@@ -17,6 +17,12 @@ public:
   double Ki;
   double Kd;
 
+  //Cross track error
+
+  double cte_sum;
+  double old_cte;
+
+
   /*
   * Constructor
   */
