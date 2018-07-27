@@ -3,6 +3,71 @@ Self-Driving Car Engineer Nanodegree Program
 
 ---
 
+In this project we will revisit the lake race track from the Behavioral Cloning Project. This time, however, we will implement a PID controller in C++ to maneuver the vehicle around the track!
+
+The simulator will provide us with the cross track error (CTE) and the velocity (mph) in order to compute the appropriate steering angle.
+
+------
+
+In order to successfully drive across the track , we have been implementing a PID controller that drive the car steering angle. 
+
+The overall PID formula can be found below as :
+
+![{\displaystyle u(t)=K_{\text{p}}e(t)+K_{\text{i}}\int _{0}^{t}e(t')\,dt'+K_{\text{d}}{\frac {de(t)}{dt}},}](https://wikimedia.org/api/rest_v1/media/math/render/svg/69072d4013ea8f14ab59a8283ef216fb958870b2) 
+
+Where : Kp, Ki , Kd are the PID Coefficient and E(t) our Cross track error.
+
+In order to drive the car successfully across the track , the PID parameters needs to be optimal as each of them have an influence on the steering such as :
+
+
+
+**Kp and the P-controller** 
+
+The Kp term in the PID equation give an output directly proportional to the cross track error, this as directly an effect on  the car steering and is the most noticeable in the steering behavior ,  driving to the right will cause the P controller to steer the car proportionally in the opposite direction. A single P controller isn't a good design for steering and would makes most of the passenger sick! Not to mention a single P controller never reach a steady state condition.
+
+
+
+**Kd anf the D-Controller**
+
+The D controller allow us to anticipating future behavior of the error, as Its output depends on rate of change of error with respect to time it enable us to smooth the car steering and steer the car close to the road center, but not exactly! 
+
+
+
+**Ki and the I-Controller**
+
+Due to limitation of the p-controller and the D controller we need to introduce another term, the I controller and its associated coefficient Ki. The I controller has an integral term in its formulation that allow us to integrate the error over a period of time, the I controller , smooth or reduce the response of the PID controller but enable removing any bias that was preventing us reaching the road center position.
+
+
+
+Combining these controller with the right parameters (Kp,Ki,Kd) enables us to get the desired response for our car steering system.
+
+
+
+**Tuning our PID Controller**
+
+Several method can be tried to get good PID parameters, trial and error is one of these and enable to well understand the impact each of the coefficient as on our system but can also be time consuming. More robust trail and error method and rules of thumbs exist to make it more effective. 
+
+In this project we've tuned the PID manually, however other PID tuning technic such as gradient descent optimization, twiddle algorithm and more can assist finding the right parameters.
+
+In our project the PID parameter that have been used are :
+
+```c++
+double init_Kp = 0.13;
+double init_Ki = 0.0002;
+double init_Kd = 3.0;
+
+//Initialize our steer pid
+steer_pid.Init(init_Kp, init_Ki, init_Kd);
+```
+
+
+
+Having tuned our PID the car successfully drive on the track !
+
+Further work could be to design another PID for controlling the car throttle command and implement an optimization algorithm to further tune the PID parameters.
+
+
+
 ## Dependencies
 
 * cmake >= 3.5
