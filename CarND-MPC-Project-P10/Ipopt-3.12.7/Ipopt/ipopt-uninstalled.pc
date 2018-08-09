@@ -1,0 +1,10 @@
+prefix=/usr/local
+libdir=/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/Interfaces
+
+Name: IPOPT
+Description: Interior Point Optimizer
+URL: https://projects.coin-or.org/Ipopt
+Version: 3.12.7
+Libs: ${libdir}/libipopt.la /usr/local/lib/libcoinlapack.a /usr/local/lib/libcoinblas.a -lgfortran  -L/usr/lib/gcc/x86_64-linux-gnu/7 -L/usr/lib/gcc/x86_64-linux-gnu/7/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/7/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/7/../../.. -lgfortran -lm -lquadmath /usr/local/lib/libcoinblas.a -lgfortran  -L/usr/lib/gcc/x86_64-linux-gnu/7 -L/usr/lib/gcc/x86_64-linux-gnu/7/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/7/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/7/../../.. -lgfortran -lm -lquadmath -lm  -ldl
+Cflags: -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/Interfaces -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/Common -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/LinAlg -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/Algorithm -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/contrib/CGPenalty -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/contrib/LinearSolverLoader -I/home/jcc/Documents/self-driving-car-nanodegree/CarND-MPC-Project-P10/Ipopt-3.12.7/Ipopt/src/Common
+Requires: coinmumps 
