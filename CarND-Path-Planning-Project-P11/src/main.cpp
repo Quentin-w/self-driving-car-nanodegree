@@ -9,6 +9,9 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 
+//including spline library to help us planning smooth trajectory
+#include "spline.h"
+
 using namespace std;
 
 // for convenience
@@ -38,7 +41,7 @@ double distance(double x1, double y1, double x2, double y2)
 {
 	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
-int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
+int ClosestWaypoint(double x, double y, vector<double> maps_x, vector<double> maps_y)
 {
 
 	double closestLen = 100000; //large number
@@ -61,7 +64,7 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vect
 
 }
 
-int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
+int NextWaypoint(double x, double y, double theta, vector<double> maps_x, vector<double> maps_y)
 {
 
 	int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
@@ -69,25 +72,21 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
 	double map_x = maps_x[closestWaypoint];
 	double map_y = maps_y[closestWaypoint];
 
-	double heading = atan2((map_y-y),(map_x-x));
+	double heading = atan2( (map_y-y),(map_x-x) );
 
-	double angle = fabs(theta-heading);
-  angle = min(2*pi() - angle, angle);
+	double angle = abs(theta-heading);
 
-  if(angle > pi()/4)
-  {
-    closestWaypoint++;
-  if (closestWaypoint == maps_x.size())
-  {
-    closestWaypoint = 0;
-  }
-  }
+	if(angle > pi()/4)
+	{
+		closestWaypoint++;
+	}
 
-  return closestWaypoint;
+	return closestWaypoint;
+
 }
 
 // Transform from Cartesian x,y coordinates to Frenet s,d coordinates
-vector<double> getFrenet(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
+vector<double> getFrenet(double x, double y, double theta, vector<double> maps_x, vector<double> maps_y)
 {
 	int next_wp = NextWaypoint(x,y, theta, maps_x,maps_y);
 
@@ -136,7 +135,7 @@ vector<double> getFrenet(double x, double y, double theta, const vector<double> 
 }
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y)
+vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> maps_x, vector<double> maps_y)
 {
 	int prev_wp = -1;
 
@@ -162,6 +161,41 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 	return {x,y};
 
 }
+
+
+//Define a boolean function calculating if we are beeing too close from a car or not.
+bool too_close(double vehicle_s, double car_s, double upper_dist, double lower_dist){
+  if (((vehicle_s - car_s) > upper_dist) or ((vehicle_s - car_s) < lower_dist)){
+    return false;
+  } else {
+    return true;
+  }
+}
+
+//define a cost function that calculate the cost of changing lane
+double lane_change_cost(vector<double> lane_s, double car_s, double upper_dist, double lower_dist){
+  double cost = 0;
+  for(int i=0; i<lane_s.size(); i++){
+    bool is_too_close = too_close(lane_s[i], car_s, upper_dist, lower_dist);
+    if (is_too_close){
+      cost += 10;
+    }
+    cost += 1; // number of vehicle in the lane
+  }
+  return cost;
+}
+
+//define a cost function that penalize staying in the same lane.
+double keepLaneCost (double front_car, double car_d, double car_s, double lane) {
+  double cost = 0;
+  if ((car_d < (4*lane+2+2)) && (car_d > (4*lane))){
+    if ((front_car > car_s) && ((front_car - car_s) < 30)){
+      cost += 1;
+    }
+  }
+  return cost;
+}
+
 
 int main() {
   uWS::Hub h;
@@ -199,8 +233,15 @@ int main() {
   	map_waypoints_dx.push_back(d_x);
   	map_waypoints_dy.push_back(d_y);
   }
+  //init the lane variable, we have 3 lanes in the simulatore (lane=0,lane=1,Lane=3)
+  // here our car start in center lane thus setting lane=1
+  int lane = 1;
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  //init our reference velocity (setting it directly to a value would cause instant acceleration and jerk issues!)
+  //We will increment this value smoothly as we decide to accelerate or brake.
+  double ref_velocity = 0.0;
+
+  h.onMessage([&ref_velocity, &lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -213,12 +254,12 @@ int main() {
 
       if (s != "") {
         auto j = json::parse(s);
-        
+
         string event = j[0].get<string>();
-        
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          
+
         	// Main car's localization Data
           	double car_x = j[1]["x"];
           	double car_y = j[1]["y"];
@@ -230,7 +271,7 @@ int main() {
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
-          	// Previous path's end s and d values 
+          	// Previous path's end s and d values
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
@@ -239,19 +280,242 @@ int main() {
 
           	json msgJson;
 
+          	/*
+			  ________________________________________
+			 |                                        |
+			 |       Variable initialization          |
+			 |________________________________________|
+
+			 */
+
+
+          	//get previous path if any
+          	int prev_size = previous_path_x.size();
+            bool too_close = false;
+
+            //if there was any previous path set the end path s as our car s to smooth our path
+            if (prev_size >2){
+              car_s = end_path_s;
+            }
+
+        	//initialize vector that will contain detected vehicle S position for each lane
+        	vector<double> lane_2;
+			vector<double> lane_1;
+			vector<double> lane_3;
+
+			//define a secure distance to keep from front vehicle
+			int security_distance = 35; //(in frenet coordinate)
+
+			//define boundaries for Lane change
+			double min_front_dist = 25;
+			double min_rear_distance = 10;
+
+			//Define a preferred changed rate in acceleration that don't generate discomfort
+			double acceleration_change_rate = 0.23;
+
+			//Speed limit on the highway
+			double speed_limit = 50.0;
+
+			/*
+		      ________________________________________
+			 |                                        |
+			 |    Sensor fusion Data processing       |
+			 |________________________________________|
+
+			 */
+
+            //read data from our sensor fusion module and loop over each detected vehicle to collect their data
+            for (int i=0; i < sensor_fusion.size(); i++){
+
+              //get vehicle vx
+              double vx = sensor_fusion[i][3];
+              //get vehicle vy
+              double vy = sensor_fusion[i][4];
+              //calculate the vector magnitude to get the vehicle speed
+              double detected_vehicle_speed = sqrt(vx*vx + vy*vy);
+              //get vehicle S
+              double detected_vehicle_s = sensor_fusion[i][5];
+              detected_vehicle_s += detected_vehicle_speed*0.02*previous_path_x.size();
+              //get vehicle d position
+              float d = sensor_fusion[i][6];
+
+              /*
+			  ________________________________________
+			 |                                        |
+			 |Prediction for detected vehicle position|
+			 |________________________________________|
+
+			 */
+
+              //if vehicle is on the left lane , log its future S position
+              if ((d < 4) && (d>0)){
+                lane_1.push_back(detected_vehicle_s);
+              }
+              //if vehicle is on the mid lane , log its future S position
+			   if ((d < 8) && (d>4)) {
+				 lane_2.push_back(detected_vehicle_s);
+			   }
+              //if vehicle is on the right lane , log its future S position
+              if((d<12) && (d>8)){
+                lane_3.push_back(detected_vehicle_s);
+              }
+              /*
+			  ________________________________________
+			 |                                        |
+			 |         Machine state logic            |
+			 |________________________________________|
+
+			 */
+
+              // Check distance of vehicle in front of us
+              if ((d < (4*lane+2+2)) && (d > (4*lane+2-2))){// if the detected vehicle is in our lane
+                if ((detected_vehicle_s > car_s) && ((detected_vehicle_s - car_s) < security_distance)){//if we are too close to it
+                  too_close = true;
+                }
+              }
+            }
+            //if we are too close reduce our velocity smoothly
+            if (too_close){
+              ref_velocity -= acceleration_change_rate;
+
+              //if we are behind a slow car let's check if we can do a lane change
+              if (ref_velocity < 40) {
+            	//if we are on lane 0 or lane 1 the only possible lane to change for is the center lane
+                if (lane == 0 or lane == 2){
+                  //lets calculate the cost of changing lane
+                  double change_lane_cost = lane_change_cost(lane_2, car_s, min_front_dist, min_rear_distance);
+                  if (change_lane_cost < 10){//if it is not too costy let's can change lane
+                    lane = 1;
+                  }
+                }
+                else if (lane == 1){//if we are in lane 1 we have 2 choices to evaluate
+                  //Evaluate shifting to left lane
+                  double left_cost = lane_change_cost(lane_1, car_s, min_front_dist, min_rear_distance);
+                  //Evaluate shifting to the right lane
+                  double right_cost = lane_change_cost(lane_3, car_s, min_front_dist, min_rear_distance);
+
+                  if (left_cost < right_cost){
+                    if (left_cost < 10){//compare Lane cost to decide what lane to change with a preference for left change
+                      lane = 0;
+                    }
+                  } else {
+                    if (right_cost < 10){//compare Lane cost to decide what lane to change
+                      lane = 2;
+                    }
+                  }
+                }
+              }
+            }
+            //If we are not too close lets accelerate smoothy up to the speed limit (50) within breaking the speed limit
+            else if(ref_velocity < speed_limit-acceleration_change_rate){
+              ref_velocity += acceleration_change_rate;
+            }
+
+            /*
+			  ________________________________________
+			 |                                        |
+			 |             Path planning              |
+			 |________________________________________|
+
+			 */
+
+
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
+            vector<double> ptsx;
+            vector<double> ptsy;
+
+            //define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 
 
-          	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          	msgJson["next_x"] = next_x_vals;
+            //lets get points from the previous path and add ours
+            double ref_x = car_x;
+            double ref_y = car_y;
+            double ref_yaw = car_yaw;
+
+            double ref_prev_x, ref_prev_y;
+            if (prev_size < 2){
+              ref_prev_x = ref_x - cos(ref_yaw);
+              ref_prev_y = ref_y - sin(ref_yaw);
+            } else{
+              ref_prev_x = previous_path_x[prev_size-2];
+              ref_prev_y = previous_path_y[prev_size-2];
+              ref_x = previous_path_x[prev_size-1];
+              ref_y = previous_path_y[prev_size-1];
+              ref_yaw = atan2(ref_y - ref_prev_y, ref_x - ref_prev_x);
+            }
+
+            ptsx.push_back(ref_prev_x);
+            ptsx.push_back(ref_x);
+            ptsy.push_back(ref_prev_y);
+            ptsy.push_back(ref_y);
+
+            //Lets generate 3 anchor points each spaced by 30 (on s scale) to generate our spline
+
+            vector<double> anchorpoint0 = getXY(car_s + 30, 4*lane + 2, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> anchorpoint1 = getXY(car_s + 60, 4*lane + 2, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> anchropoint2 = getXY(car_s + 90, 4*lane + 2, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+            //push back our Anchor points associated X and Y values
+            ptsx.push_back(anchorpoint0[0]);
+            ptsx.push_back(anchorpoint1[0]);
+            ptsx.push_back(anchropoint2[0]);
+            ptsy.push_back(anchorpoint0[1]);
+            ptsy.push_back(anchorpoint1[1]);
+            ptsy.push_back(anchropoint2[1]);
+
+            //let's convert our point so they are expressed relatively to the car
+            for (int i=0; i<ptsx.size(); i++){
+              double shift_x = ptsx[i] - ref_x;
+              double shift_y = ptsy[i] - ref_y;
+              ptsx[i] = shift_x*cos(0-ref_yaw) - shift_y*sin(0-ref_yaw);
+              ptsy[i] = shift_x*sin(0-ref_yaw) + shift_y*cos(0-ref_yaw);
+            }
+
+            //create a spline
+            tk::spline s;
+            //set our 3 spline anchor points
+            s.set_points(ptsx, ptsy);
+
+            // Set our horizon
+            double target_x = 30;
+            double target_y = s(30);
+            double target_dist = sqrt(target_x*target_x + target_y*target_y);
+
+            //Add  points from our previous path that have not been dealing with to our current path
+            for (int i=0; i<prev_size; i++){
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+
+            double x_add_on = 0.0;
+
+            for (int i=0; i<50 - prev_size; i++){
+              double N = target_dist/(0.02*ref_velocity/2.24);//dividing by 2.24 to convert miles per hours in meter per sec
+              double x_ = x_add_on + target_x/N;
+              double y_ = s(x_);
+              x_add_on = x_;
+
+              //convert now the coordinate from the car reference to the frame reference
+
+              double x_ref = x_, y_ref = y_;
+              x_ = ref_x + (x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw));
+              y_ = ref_y + (x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw));
+
+              //push back the values
+              next_x_vals.push_back(x_);
+              next_y_vals.push_back(y_);
+            }
+
+
+            msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          
+
         }
       } else {
         // Manual driving
@@ -294,3 +558,83 @@ int main() {
   }
   h.run();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
