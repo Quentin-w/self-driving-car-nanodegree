@@ -40,7 +40,7 @@ At any time we make sure not to break the speed limit and to also maintain an op
 double speed_limit = 50.0;
 ```
 
-**Comfort **
+**Comfort**
 
 Since comfort is also an important point for our passenger , we have set several rules :
 
